@@ -77,10 +77,22 @@ export const CONTRIBUTORS: Contributor[] = [
   {
     name: 'Riya Ghoshi',
     github: 'riya-ctrl376',
-  }
-  , {
-    name: 'Aryan Gupta',
-    github: 'Aryan0512398',
-  }
-
+  },
+  {
+    name: 'Kamakshi Gupta',
+    github: '29kamakshigupta',
+  },
+  {
+    name:'Ronak Vegad',
+    github:'Ronak-vegad',
+  },
+  {
+    name:'Yuvaraj Ragothaman',
+    github:'LevelSilence',
+  },
+  {
+    name:'Aiyaan Mahajan',
+    github:'Aiyaan-Mahajan',
+  },
+  
 ];
