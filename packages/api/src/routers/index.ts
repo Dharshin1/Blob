@@ -1,7 +1,8 @@
 import { z } from "zod";
 import { router, publicProcedure } from "../server.js";
-import { users } from "@blob/db/schema";
+import { oauthAccounts, users } from "@blob/db/schema";
 import { OAuth2Client } from "google-auth-library";
+import {eq} from "drizzle-orm";
 
 const client = new OAuth2Client();
 
@@ -31,25 +32,74 @@ export const appRouter = router({
     return ctx.db.select().from(users);
   }),
 
-  verifyGoogleToken: publicProcedure
+    verifyGoogleToken: publicProcedure
     .input(z.object({ idToken: z.string() }))
-    .mutation(async ({ input }) => {
+    .mutation(async ({ input, ctx }) => {
       try {
         const ticket = await client.verifyIdToken({
           idToken: input.idToken,
         });
         const payload = ticket.getPayload();
 
-        console.log("user data:", payload);
+        if (!payload?.email || !payload?.sub) {
+          throw new Error("No email or user ID found");
+        }
+        let [user] = await ctx.db
+          .select()
+          .from(users)
+          .where(eq(users.email, payload.email))
+          .limit(1);
+
+        if (!user) {
+          [user] = await ctx.db
+            .insert(users)
+            .values({
+              name: payload.name || "Unknown",
+              email: payload.email,
+              image: payload.picture || null,
+            })
+            .returning();
+          console.log(`New guy : ${payload.email}`);
+        } else {
+          console.log(`Current guy ${payload.email}`);
+        }
+
+        
+        const [existingOAuth] = await ctx.db
+          .select()
+          .from(oauthAccounts)
+          .where(eq(oauthAccounts.providerUserId, payload.sub))
+          .limit(1);
+
+        if (existingOAuth?.lastLoginAt) {
+          console.log(`Previous login was at: ${existingOAuth.lastLoginAt.toISOString()}`);
+        }
+
+        
+        await ctx.db
+          .insert(oauthAccounts)
+          .values({
+            userId: user.id,
+            providerId: "google",
+            providerUserId: payload.sub,
+            lastLoginAt: new Date(),
+          })
+          .onConflictDoUpdate({
+            target: [oauthAccounts.providerId, oauthAccounts.providerUserId],
+            set: {
+              lastLoginAt: new Date(),
+              updatedAt: new Date(),
+            },
+          });
 
         return {
           success: true,
           user: payload,
         };
       } catch (error) {
-        console.error("google token verification failed:", error);
+        console.error("Google token verification failed:", error);
         throw new Error(
-          `token verification failed: ${error instanceof Error ? error.message : "Unknown error"}`,
+          `Token verification failed: ${error instanceof Error ? error.message : "Unknown error"}`
         );
       }
     }),
